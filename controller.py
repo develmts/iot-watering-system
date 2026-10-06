@@ -1,8 +1,9 @@
 class Controller:
 
-    def __init__(self, hass, reporter):
+    def __init__(self, hass, reporter, context_store):
         self.hass = hass
         self.reporter = reporter
+        self.context_store = context_store
 
     def handle_request(self, mode, device, readings, tag):
         # self.hass.log(
@@ -95,4 +96,16 @@ class Controller:
             code="PREFLIGHT_OK",
             message="Conditions met",
             tag=tag
+        )
+        
+        messages = self.reporter.get_messages(tag)
+
+        self.context_store.save(
+            device.device_id,
+            {
+                "device_id": device.device_id,
+                "request_mode": mode,
+                "tag": tag,
+                "messages": messages,
+            }
         )

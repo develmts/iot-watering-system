@@ -1,7 +1,8 @@
 class Reporter:
 
-    def __init__(self, hass):
+    def __init__(self, hass, context_store):
         self.hass = hass
+        self.context_store = context_store
         self.messages = {}
 
     def report(self, level, code, message, tag=None):
@@ -11,6 +12,12 @@ class Reporter:
 
         if tag is not None:
             self._notify(message, tag)
+
+    def get_messages(self, tag):
+        if tag is None:
+            return []
+
+        return list(self.messages.get(tag, []))
 
     def _log(self, level, code, message):
         log_level = {

@@ -2,11 +2,13 @@ from appdaemon.plugins.hass import Hass
 from .watering_device import WateringDevice
 from .controller import Controller
 from .reporter import Reporter
+from .context_store import ContextStore
 
 class WateringSystem(Hass):
 
     def initialize(self):
-        self.reporter = Reporter(self)
+        self.context_store = ContextStore()
+        self.reporter = Reporter(self, self.context_store)
         self.reporter.report(
             level="INFO",
             code="SYSTEM_STARTING",
@@ -15,20 +17,19 @@ class WateringSystem(Hass):
         )         
 
 
-        self.controller = Controller(self, self.reporter)
+        self.controller = Controller(self, self.reporter, self.context_store)
 
         self.listen_event(
             self.request_received,
             "irrigation_request"
         )
-        self.reporter = Reporter(self)
 
         self.reporter.report(
             level="INFO",
             code="SYSTEM_READY",
             message="WateringSystem ready",
             tag=None
-        )        
+        )  
 
     def request_received(self, event_name, data, kwargs):
         self.reporter.report(
@@ -79,6 +80,12 @@ class WateringSystem(Hass):
         }
 
     def resolve_device_id(self, device):
+        self.reporter.report(
+            level="INFO",
+            code="DEVICE_RESOLVE",
+            message=f"Resolving device: {device!r}",
+            tag=None
+        )
         device_id = self.device_id(device)
 
         if not device_id:
@@ -114,12 +121,12 @@ class WateringSystem(Hass):
             )
             return
 
-        # self.reporter.report(
-        #     level="INFO",
-        #     code="DEVICE_RESOLVED",
-        #     message=f"Exploring watering device: {device} -> {device_id}",
-        #     tag=None
-        # )
+        self.reporter.report(
+            level="INFO",
+            code="DEVICE_RESOLVED",
+            message=f"Exploring watering device: {device} -> {device_id}",
+            tag=None
+        )
 
         #watering_device = WateringDevice(self, device_id)
         watering_device = WateringDevice(
@@ -133,4 +140,3 @@ class WateringSystem(Hass):
             readings=request["readings"],
             tag=request["tag"]
         )
-
