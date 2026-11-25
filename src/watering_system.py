@@ -2,6 +2,7 @@ from appdaemon.plugins.hass import Hass
 from datetime import datetime
 import uuid
 import math
+import re
 import asyncio
 from .watering_device import WateringDevice
 from .controller import Controller
@@ -47,6 +48,7 @@ class WateringSystem(Hass):
             known_fields = {
                 "version", "request_mode", "devices", "target_type", "target",
                 "readings", "validators", "tag", "metadata",
+                "enabled", "season_start", "season_end",
             }
             unknown_fields = sorted(set(data) - known_fields, key=str)
             if unknown_fields:
@@ -101,10 +103,27 @@ class WateringSystem(Hass):
         for name, value in (("readings", readings), ("validators", validators)):
             if not isinstance(value, dict) or value:
                 raise ValueError(f"{name} must be an empty dictionary in phase 1")
-        if tag is not None and not isinstance(tag, str):
+        if not isinstance(tag, str):
             raise ValueError("tag must be a string")
 
+        enabled = data.get("enabled")
+        if type(enabled) is not bool:
+            raise ValueError("enabled must be a boolean")
+        season = {}
+        if mode == "scheduler":
+            for field in ("season_start", "season_end"):
+                value = data.get(field)
+                if not isinstance(value, str) or not re.fullmatch(r"[0-9]{2}-[0-9]{2}", value):
+                    raise ValueError(f"{field} must be MM-DD")
+                try:
+                    datetime.strptime("2000-" + value, "%Y-%m-%d")
+                except ValueError as error:
+                    raise ValueError(f"{field} must be a valid calendar date") from error
+                season[field] = value
+
         return {
+            "enabled": enabled,
+            **season,
             "request_id": uuid.uuid4().hex[:12],
             "received_at": datetime.now().astimezone().isoformat(),
             "version": version,
@@ -175,9 +194,26 @@ class WateringSystem(Hass):
                     f"devices={request['devices']}, "
                     f"readings={request['readings']}, "
                     f"validators={request['validators']}, "
-                    f"tag={request['tag']}",
+                    f"tag={request['tag']}, "
+                    f"enabled={request['enabled']}, "
+                    f"season_start={request.get('season_start')}, "
+                    f"season_end={request.get('season_end')}",
             tag=None
         )
+
+        if not request["enabled"]:
+            self.reporter.report(level="DENIED", code="REQUEST_DISABLED",
+                                 message="Irrigation request is disabled", tag=request["tag"])
+            return
+        if request["request_mode"] == "scheduler":
+            today = self.date().strftime("%m-%d")
+            start, end = request["season_start"], request["season_end"]
+            in_season = start <= today <= end if start <= end else today >= start or today <= end
+            if not in_season:
+                self.reporter.report(level="DENIED", code="OUTSIDE_SEASON",
+                                     message=f"Date {today} outside season {start} to {end}",
+                                     tag=request["tag"])
+                return
 
         for device_id in request["devices"]:
             self.dispatch_device(device_id, request)
