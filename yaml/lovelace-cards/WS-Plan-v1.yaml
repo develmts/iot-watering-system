@@ -1,0 +1,37 @@
+type: entities
+title: WS Plan - NW
+show_header_toggle: false
+entities:
+  - entity: switch.ws_plan_nw_enabled
+    name: Enabled
+    icon: mdi:calendar-check
+
+  - type: section
+    label: Schedule
+
+  - entity: text.ws_plan_nw_start_time
+    name: Start Time
+    icon: mdi:clock-outline
+
+  - entity: text.ws_plan_nw_season_start
+    name: Season Start
+    icon: mdi:calendar-start
+
+  - entity: text.ws_plan_nw_season_end
+    name: Season End
+    icon: mdi:calendar-end
+
+  - type: section
+    label: Irrigation
+
+  - entity: text.ws_plan_nw_devices
+    name: Devices
+    icon: mdi:valve
+
+  - entity: select.ws_plan_nw_target_type
+    name: Target Type
+    icon: mdi:tune
+
+  - entity: number.ws_plan_nw_target
+    name: Target
+    icon: mdi:target
