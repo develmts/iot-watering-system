@@ -162,11 +162,4 @@ class WateringSystem(Hass):
             device_id
         )
 
-        # Temporary development interlock: no controller actions on real devices.
-        self.reporter.report(
-            level="INFO",
-            code="CONTRACT_VALIDATED",
-            message="Request normalized and device resolved; physical actions disabled",
-            tag=request["tag"]
-        )
-        return
+        self.controller.handle_request(request, watering_device)
