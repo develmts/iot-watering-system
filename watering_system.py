@@ -2,6 +2,7 @@ from appdaemon.plugins.hass import Hass
 from datetime import datetime
 import uuid
 import math
+import asyncio
 from .watering_device import WateringDevice
 from .controller import Controller
 from .reporter import Reporter
@@ -49,13 +50,15 @@ class WateringSystem(Hass):
                 level="ERROR",
                 code="INVALID_REQUEST",
                 message=f"Invalid request: {error}",
-                tag=data.get("tag") if isinstance(data.get("tag"), str) else None
+                tag=data.get("tag") if isinstance(data, dict) and isinstance(data.get("tag"), str) else None
             )
             return
 
         self.dispatch_request(request)
 
     def normalize_request(self, data):
+        if not isinstance(data, dict):
+            raise ValueError("Request must be a dictionary")
         version = data.get("version", 1)
         mode = data.get("request_mode")
         devices = data.get("devices")
@@ -107,12 +110,42 @@ class WateringSystem(Hass):
             message=f"Resolving device: {device!r}",
             tag=None
         )
-        device_id = self.device_id(device)
-
-        if not device_id:
+        registry = self.read_device_registry()
+        matches = [
+            entry["id"] for entry in registry
+            if (entry.get("name_by_user") or entry.get("name")) == device
+        ]
+        if not matches:
             raise ValueError(f"Device not found: {device}")
+        if len(matches) != 1:
+            raise ValueError(f"Ambiguous device name: {device}")
+        return matches[0]
 
-        return device_id
+    def read_device_registry(self):
+        # Read-only adapter to AppDaemon's existing authenticated HA connection.
+        # Fail closed if the installed plugin does not expose this interface.
+        try:
+            plugin = self.AD.plugins.get_plugin_object(self.namespace)
+            future = asyncio.run_coroutine_threadsafe(
+                plugin.websocket_send_json(type="config/device_registry/list"),
+                self.AD.loop
+            )
+            try:
+                response = future.result(timeout=15)
+            except Exception:
+                future.cancel()
+                raise
+            if not isinstance(response, dict) or response.get("success") is not True:
+                raise ValueError("Registry request unsuccessful")
+            entries = response.get("result")
+            if not isinstance(entries, list) or not all(
+                isinstance(entry, dict) and isinstance(entry.get("id"), str)
+                for entry in entries
+            ):
+                raise ValueError("Invalid device registry response")
+            return entries
+        except Exception as error:
+            raise ValueError(f"Device registry unavailable: {error}") from error
 
     def dispatch_request(self, request):
         self.reporter.report(
@@ -142,7 +175,7 @@ class WateringSystem(Hass):
         except ValueError as error:
             self.reporter.report(
                 level="ERROR",
-                code="DEVICE_NOT_FOUND",
+                code="DEVICE_RESOLUTION_FAILED",
                 message=str(error),
                 tag=request["tag"]
             )
