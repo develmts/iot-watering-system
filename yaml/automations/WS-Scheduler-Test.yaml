@@ -1,0 +1,13 @@
+alias: WS Scheduler Test
+description: "Validate timestamp-based scheduling"
+triggers:
+  - trigger: time
+    at: sensor.ws_plan_nw_next_run
+conditions: []
+actions:
+  - action: persistent_notification.create
+    data:
+      title: WS Scheduler Test
+      message: "Scheduled trigger executed successfully."
+      notification_id: ws_scheduler_test
+mode: single
