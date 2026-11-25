@@ -64,6 +64,39 @@ class ContractTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.ws.normalize_request(data)
 
+    def test_unknown_fields(self):
+        self.ws.reporter = Mock()
+        self.ws.dispatch_request = Mock()
+        data = dict(self.data, foo=1, bar=2, metadata={"origin": "REMOTE"})
+        self.ws.request_received("irrigation_request", data, {})
+        reports = [call.kwargs for call in self.ws.reporter.report.call_args_list]
+        self.assertEqual([r["code"] for r in reports],
+                         ["REQUEST_RECEIVED", "UNKNOWN_REQUEST_FIELDS"])
+        self.assertEqual(reports[0]["message"], f"Request received: {data}")
+        self.assertEqual(reports[1]["level"], "WARNING")
+        self.assertEqual(reports[1]["message"], "Ignoring unknown fields: ['bar', 'foo']")
+        self.assertIsNone(reports[1]["tag"])
+        request = self.ws.dispatch_request.call_args.args[0]
+        for field in ("foo", "bar", "metadata"):
+            self.assertNotIn(field, request)
+
+    def test_metadata_without_warning(self):
+        self.ws.reporter = Mock()
+        self.ws.dispatch_request = Mock()
+        self.ws.request_received("irrigation_request", dict(self.data, metadata={}), {})
+        self.assertEqual(self.ws.reporter.report.call_count, 1)
+        self.ws.dispatch_request.assert_called_once()
+
+    def test_unknown_fields_do_not_bypass_validation(self):
+        self.ws.reporter = Mock()
+        self.ws.dispatch_request = Mock()
+        self.ws.request_received("irrigation_request", dict(self.data, foo=1, target=-1), {})
+        self.assertEqual(
+            [call.kwargs["code"] for call in self.ws.reporter.report.call_args_list],
+            ["REQUEST_RECEIVED", "UNKNOWN_REQUEST_FIELDS", "INVALID_REQUEST"]
+        )
+        self.ws.dispatch_request.assert_not_called()
+
     def test_device_resolution(self):
         self.ws.reporter = Mock()
         self.ws.read_device_registry = Mock(return_value=[
