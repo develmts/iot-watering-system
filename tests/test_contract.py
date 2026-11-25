@@ -1,3 +1,4 @@
+from datetime import date
 import importlib
 import pathlib
 import sys
@@ -24,14 +25,15 @@ class ContractTests(unittest.TestCase):
     def setUp(self):
         self.ws = WateringSystem()
         self.data = dict(request_mode="scheduler", devices=["Valve"],
-                         target_type="duration", target=600)
+                         target_type="duration", target=600, tag="test", enabled=True,
+                         season_start="04-01", season_end="10-31")
 
     def test_defaults(self):
         request = self.ws.normalize_request(self.data)
         self.assertEqual(request["version"], 1)
         self.assertEqual(request["readings"], {})
         self.assertEqual(request["validators"], {})
-        self.assertIsNone(request["tag"])
+        self.assertEqual(request["tag"], "test")
 
     def test_capacity_and_future_version(self):
         request = self.ws.normalize_request(dict(self.data, version=2,
@@ -50,7 +52,9 @@ class ContractTests(unittest.TestCase):
             ("target", float("nan")), ("target", float("inf")),
             ("readings", []), ("readings", {"x": 1}),
             ("validators", None), ("validators", {"x": 1}),
-            ("tag", []),
+            ("tag", []), ("tag", None), ("enabled", 1), ("enabled", "on"),
+            ("season_start", "02-30"), ("season_end", "4-01"),
+            ("season_end", None),
         ]:
             with self.subTest(field=field, value=value):
                 with self.assertRaises(ValueError):
@@ -109,6 +113,50 @@ class ContractTests(unittest.TestCase):
         self.ws.read_device_registry.return_value.append({"id": "c", "name": "Valve"})
         with self.assertRaisesRegex(ValueError, "Ambiguous"):
             self.ws.resolve_device_id("Valve")
+
+    def test_onetime_ignores_season(self):
+        self.ws.reporter = Mock()
+        self.ws.dispatch_request = Mock()
+        data = dict(self.data, request_mode="oneTime", season_start=None,
+                    season_end={"invalid": True})
+        self.ws.request_received("irrigation_request", data, {})
+        self.assertEqual(self.ws.reporter.report.call_count, 1)
+        request = self.ws.dispatch_request.call_args.args[0]
+        self.assertNotIn("season_start", request)
+        self.assertNotIn("season_end", request)
+        del data["season_start"], data["season_end"]
+        self.ws.normalize_request(data)
+        for field in ("enabled", "tag", "devices", "target", "target_type"):
+            with self.subTest(field=field):
+                with self.assertRaises(ValueError):
+                    self.ws.normalize_request({k: v for k, v in data.items() if k != field})
+
+    def test_request_policy(self):
+        for mode, enabled, start, end, today, expected in [
+            ("scheduler", False, "04-01", "10-31", date(2026, 6, 1), "REQUEST_DISABLED"),
+            ("oneTime", False, None, None, date(2026, 6, 1), "REQUEST_DISABLED"),
+            ("scheduler", True, "04-01", "10-31", date(2026, 11, 1), "OUTSIDE_SEASON"),
+            ("scheduler", True, "04-01", "10-31", date(2026, 4, 1), None),
+            ("scheduler", True, "04-01", "10-31", date(2026, 10, 31), None),
+            ("scheduler", True, "11-01", "02-28", date(2026, 1, 1), None),
+            ("scheduler", True, "11-01", "02-28", date(2026, 6, 1), "OUTSIDE_SEASON"),
+            ("oneTime", True, None, None, date(2026, 11, 1), None),
+        ]:
+            with self.subTest(mode=mode, enabled=enabled, today=today):
+                self.ws.reporter = Mock()
+                self.ws.dispatch_device = Mock()
+                self.ws.date = Mock(return_value=today)
+                request = self.ws.normalize_request(dict(self.data, request_mode=mode,
+                    enabled=enabled, season_start=start, season_end=end))
+                self.ws.dispatch_request(request)
+                if expected:
+                    self.ws.dispatch_device.assert_not_called()
+                    self.assertEqual(self.ws.reporter.report.call_args.kwargs["code"], expected)
+                    self.assertEqual(self.ws.reporter.report.call_args.kwargs["tag"], "test")
+                else:
+                    self.ws.dispatch_device.assert_called_once_with("Valve", request)
+                if mode == "oneTime":
+                    self.ws.date.assert_not_called()
 
     def test_preflight_never_actuates(self):
         hass, reporter, store, device = Mock(), Mock(), Mock(), Mock()
