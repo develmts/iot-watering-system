@@ -64,6 +64,19 @@ class ContractTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.ws.normalize_request(data)
 
+    def test_device_resolution(self):
+        self.ws.reporter = Mock()
+        self.ws.read_device_registry = Mock(return_value=[
+            {"id": "a", "name": "Original", "name_by_user": "Valve"},
+            {"id": "b", "name": "Other"},
+        ])
+        self.assertEqual(self.ws.resolve_device_id("Valve"), "a")
+        with self.assertRaises(ValueError):
+            self.ws.resolve_device_id("Original")
+        self.ws.read_device_registry.return_value.append({"id": "c", "name": "Valve"})
+        with self.assertRaisesRegex(ValueError, "Ambiguous"):
+            self.ws.resolve_device_id("Valve")
+
     def test_preflight_never_actuates(self):
         hass, reporter, store, device = Mock(), Mock(), Mock(), Mock()
         device.get_valve_state.return_value = "off"
