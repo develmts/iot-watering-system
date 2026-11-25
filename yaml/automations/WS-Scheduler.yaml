@@ -1,0 +1,48 @@
+alias: WS Scheduler
+description: "Emit a scheduled WateringSystem request from WS Plan - NW"
+triggers:
+  - trigger: time
+    at: sensor.ws_plan_nw_next_run
+conditions:
+  - condition: state
+    entity_id: input_boolean.auto_watering
+    state: "on"
+actions:
+  - variables:
+      plan_devices: "{{ states('text.ws_plan_nw_devices') | from_json(default=none) }}"
+      plan_enabled: "{{ states('switch.ws_plan_nw_enabled') }}"
+      plan_season_start: "{{ states('text.ws_plan_nw_season_start') }}"
+      plan_season_end: "{{ states('text.ws_plan_nw_season_end') }}"
+      plan_target_type: "{{ states('select.ws_plan_nw_target_type') }}"
+      plan_target: "{{ states('number.ws_plan_nw_target') | float(default=none) }}"
+  - if:
+      - condition: template
+        value_template: >
+          {{ plan_enabled not in ['on', 'off']
+             or plan_devices is none
+             or plan_target is none }}
+    then:
+      - action: persistent_notification.create
+        data:
+          title: WS Scheduler
+          message: "Cannot construct irrigation request: invalid or unavailable plan data."
+          notification_id: ws_plan_nw
+      - stop: "Invalid or unavailable plan data"
+        error: true
+  - event: irrigation_request
+    event_data:
+      version: 1
+      request_mode: scheduler
+      devices: "{{ plan_devices }}"
+      enabled: "{{ plan_enabled == 'on' }}"
+      season_start: "{{ plan_season_start }}"
+      season_end: "{{ plan_season_end }}"
+      target_type: "{{ plan_target_type }}"
+      target: >
+        {{ plan_target | int
+           if plan_target_type == 'duration' and plan_target == (plan_target | int)
+           else plan_target }}
+      readings: {}
+      validators: {}
+      tag: ws_plan_nw
+mode: single
