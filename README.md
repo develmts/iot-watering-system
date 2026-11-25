@@ -4,7 +4,7 @@ Sistema de reg per a Home Assistant i AppDaemon.
 
 ## Estructura
 
-- `*.py`: motor WateringSystem.
+- [`src/`](src/): motor WateringSystem.
 - [`docs/`](docs/): [arquitectura](docs/WateringSystem-Architecture.md) i [model WS Plan](docs/WS-Plan.md).
 - [`yaml/automations/`](yaml/automations/): automatitzacions HA.
 - [`yaml/virtual-devices/`](yaml/virtual-devices/): dispositius Virtual Components.
@@ -14,6 +14,10 @@ Sistema de reg per a Home Assistant i AppDaemon.
 ## Estat
 
 En desenvolupament. Contracte de peticions i preflight validats; actuacions físiques desactivades. WS Scheduler inicial pendent d'adaptació al contracte actual; no desplegar encara.
+
+## Desplegament
+
+Copiar els fitxers Python de `src/` al directori existent de l'aplicació AppDaemon, mantenint la configuració actual. No copiar el directori `src/` com a paquet nou.
 
 ## Proves
 

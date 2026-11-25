@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 package = types.ModuleType("ws_test_package")
-package.__path__ = [str(ROOT)]
+package.__path__ = [str(ROOT / "src")]
 hass_module = types.ModuleType("appdaemon.plugins.hass")
 hass_module.Hass = object
 with patch.dict(sys.modules, {
