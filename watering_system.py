@@ -43,6 +43,20 @@ class WateringSystem(Hass):
             tag=None
         )
 
+        if isinstance(data, dict):
+            known_fields = {
+                "version", "request_mode", "devices", "target_type", "target",
+                "readings", "validators", "tag", "metadata",
+            }
+            unknown_fields = sorted(set(data) - known_fields, key=str)
+            if unknown_fields:
+                self.reporter.report(
+                    level="WARNING",
+                    code="UNKNOWN_REQUEST_FIELDS",
+                    message=f"Ignoring unknown fields: {unknown_fields}",
+                    tag=None
+                )
+
         try:
             request = self.normalize_request(data)
         except ValueError as error:
