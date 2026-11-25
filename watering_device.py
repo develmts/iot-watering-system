@@ -113,7 +113,6 @@ class WateringDevice:
 
         return float(state)
 
-
     def get_valve_state(self):
         if self.valve_entity is None:
             return None
@@ -121,12 +120,34 @@ class WateringDevice:
         return self.hass.get_state(self.valve_entity)
 
 
+    def set_mode(self, mode):
+        if self.mode_entity is None:
+            return False
+
+        self.hass.call_service(
+            "select/select_option",
+            entity_id=self.mode_entity,
+            option=mode
+        )
+        return True
+
     def get_mode(self):
         if self.mode_entity is None:
             return None
 
         return self.hass.get_state(self.mode_entity)
 
+    def set_target(self, target):
+        if self.target_entity is None:
+            return False
+
+        self.hass.call_service(
+            "number/set_value",
+            entity_id=self.target_entity,
+            value=target
+        )
+
+        return True
 
     def get_target(self):
         if self.target_entity is None:

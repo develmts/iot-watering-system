@@ -1,4 +1,6 @@
 from appdaemon.plugins.hass import Hass
+from datetime import datetime
+import uuid
 from .watering_device import WateringDevice
 from .controller import Controller
 from .reporter import Reporter
@@ -73,6 +75,8 @@ class WateringSystem(Hass):
             readings = [readings]
 
         return {
+            "request_id": uuid.uuid4().hex[:12],
+            "received_at": datetime.now().astimezone().isoformat(),
             "mode": mode,
             "devices": devices,
             "readings": readings,
@@ -98,6 +102,8 @@ class WateringSystem(Hass):
             level="INFO",
             code="REQUEST_NORMALIZED",
             message="Normalized request: "
+                    f"request_id={request['request_id']}, "
+                    f"received_at={request['received_at']}, "
                     f"mode={request['mode']}, "
                     f"devices={request['devices']}, "
                     f"readings={request['readings']}, "
@@ -134,9 +140,13 @@ class WateringSystem(Hass):
             self.reporter,
             device_id
         )
+
         self.controller.handle_request(
+            request_id=request["request_id"],
+            received_at=request["received_at"],
             mode=request["mode"],
             device=watering_device,
             readings=request["readings"],
             tag=request["tag"]
         )
+        

@@ -1,0 +1,24 @@
+alias: WS Scheduler
+description: "Watering System scheduled request"
+triggers:
+  - trigger: time
+    at: "09:00:00"
+actions:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: input_boolean.auto_watering
+            state: "on"
+        sequence:
+          - event: irrigation_request
+            event_data:
+              mode: scheduler
+              devices:
+                - "Watering Control a4f9"
+              tag: ws_scheduler
+    default:
+      - action: persistent_notification.create
+        data:
+          title: WS Scheduler
+          message: Automatic watering is disabled.
+mode: single

@@ -9,6 +9,8 @@ class ContextStore:
     
     _CONTEXT_SCHEMA = {
         "device_id": str,
+        "request_id": str,
+        "received_at": "datetime",
         "request_mode": {"scheduler", "oneTime"},
         "phase": {"STARTING", "WATERING", "STOPPING"},
         "started_at": "datetime",

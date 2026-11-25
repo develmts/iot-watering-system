@@ -5,7 +5,13 @@ class Controller:
         self.reporter = reporter
         self.context_store = context_store
 
-    def handle_request(self, mode, device, readings, tag):
+    def handle_request(self,
+        request_id,
+        received_at,
+        mode, 
+        device, 
+        readings, 
+        tag):
         # self.hass.log(
         #     "Controller request:\n"
         #     f"  mode     = {mode}\n"
@@ -90,7 +96,7 @@ class Controller:
                 tag=tag
             )
             return
-
+        # Everything's ok
         self.reporter.report(
             level="INFO",
             code="PREFLIGHT_OK",
@@ -99,13 +105,56 @@ class Controller:
         )
         
         messages = self.reporter.get_messages(tag)
-
+        # Store the context
         self.context_store.save(
             device.device_id,
             {
                 "device_id": device.device_id,
+                "request_id": request_id,
+                "received_at": received_at,
+                "phase": "STARTING",
                 "request_mode": mode,
                 "tag": tag,
                 "messages": messages,
             }
         )
+        # Set & check Irrigation mode
+        if not device.set_mode("duration"):
+            self.reporter.report(
+                level="ERROR",
+                code="MODE_SET_FAILED",
+                message="Unable to set irrigation mode",
+                tag=tag
+            )
+            return
+
+        self.hass.run_in(
+            self._check_mode,
+            1,
+            device=device,
+            tag=tag
+        )
+
+        # Set & check Irrigation target
+        
+    def _check_mode(self, kwargs):
+        device = kwargs["device"]
+        tag = kwargs["tag"]
+
+        mode_state = device.get_mode()
+
+        if mode_state != "duration":
+            self.reporter.report(
+                level="ERROR",
+                code="MODE_NOT_CONFIRMED",
+                message=f"Irrigation mode not confirmed (state={mode_state})",
+                tag=tag
+            )
+            return
+
+        self.reporter.report(
+            level="INFO",
+            code="MODE_CONFIRMED",
+            message="Irrigation mode confirmed: duration",
+            tag=tag
+        )    
