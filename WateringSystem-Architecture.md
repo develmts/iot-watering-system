@@ -127,6 +127,10 @@ El nom del dispositiu i el tag de l'exemple són il·lustratius; no constitueixe
 - El versionat permetrà seleccionar mecanismes de normalització quan hi hagi versions diferents. Ara només es valida que sigui un enter positiu; no s'implementa dispatch per versions ni una política de compatibilitat futura. Això implica que un número superior a 1 no garanteix suport semàntic d'una versió futura.
 - No es decideix encara si s'ha de mantenir compatibilitat temporal amb l'antic camp `mode`.
 
+### 4.3.1. Camps desconeguts
+
+Política permissiva amb advertència: `REQUEST_RECEIVED` conserva íntegrament les dades originals abans de qualsevol validació. Els camps desconeguts generen un `WARNING` amb codi `UNKNOWN_REQUEST_FIELDS` i els noms dels camps, sense notificació persistent. Es descarten de la petició normalitzada. `metadata` d'AppDaemon queda exempta de l'advertència. Les validacions obligatòries no canvien; un camp desconegut no garanteix que la seva semàntica sigui respectada.
+
 ### 4.4. Identificació i objectius
 
 Es manté la identificació mitjançant `friendly_name`, resolt pel WS a `device_id`. La resolució ha de ser inequívoca: si no existeix o hi ha ambigüitat, es rebutja la petició.
