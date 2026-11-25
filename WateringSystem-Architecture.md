@@ -202,6 +202,14 @@ Ordre acordat: primer el contracte, després la configuració i interfície.
 
 Les dues línies (contracte i interfície) poden avançar independentment un cop definit el contracte. No s'inclouen en aquesta fase ni el suport multidispositiu efectiu ni la issue de lectures i validators.
 
+## 9. Nice to have @ V2: HA Action facade
+
+**Estat:** millora opcional ajornada a V2; no és un requisit de la fase actual.
+
+Estudiar una Action nativa de HA, `irrigation.request`, com a façana que emeti l'esdeveniment `irrigation_request` amb el contracte corresponent. Aportaria autocompleció, descobriment, documentació dels camps, selectors i una interfície gràfica per a peticions manuals.
+
+Es mantindria el bus d'esdeveniments com a contracte del WS i la validació definitiva dins d'AppDaemon. La façana seria opcional i no substituiria l'accés directe mitjançant l'esdeveniment. Caldrà valorar si compensa mantenir una petita integració pròpia de HA. No s'acorda ara cap implementació ni es modifica el contracte actual.
+
 ---
 
 Document de decisions, no especificació exhaustiva del codi existent. Les sintaxis futures i les polítiques marcades com a pendents no s'han de considerar aprovades ni implementades.
