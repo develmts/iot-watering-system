@@ -1,0 +1,54 @@
+type: vertical-stack
+cards:
+  - type: tile
+    entity: switch.ws_plan_nw_enabled
+    name: WS Plan - NW
+    icon: mdi:calendar-clock
+    hide_state: true
+    tap_action:
+      action: toggle
+    icon_tap_action:
+      action: toggle
+    features:
+      - type: toggle
+    features_position: inline
+
+  - type: entities
+    entities:
+      - entity: text.ws_plan_nw_start_time
+        name: Start Time
+        icon: mdi:clock-outline
+
+  - type: horizontal-stack
+    cards:
+      - type: entities
+        entities:
+          - entity: text.ws_plan_nw_season_start
+            name: Season Start
+            icon: mdi:calendar-start
+
+      - type: entities
+        entities:
+          - entity: text.ws_plan_nw_season_end
+            name: Season End
+            icon: mdi:calendar-end
+
+  - type: entities
+    entities:
+      - entity: text.ws_plan_nw_devices
+        name: Devices
+        icon: mdi:valve
+
+  - type: horizontal-stack
+    cards:
+      - type: entities
+        entities:
+          - entity: select.ws_plan_nw_target_type
+            name: Target Type
+            icon: mdi:tune
+
+      - type: entities
+        entities:
+          - entity: number.ws_plan_nw_target
+            name: Target
+            icon: mdi:target
