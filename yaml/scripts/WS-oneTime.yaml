@@ -1,0 +1,15 @@
+alias: WS oneTime
+sequence:
+  - event: irrigation_request
+    event_data:
+      version: 1
+      request_mode: oneTime
+      devices:
+        - Watering Control a4f9
+      enabled: false
+      target_type: duration
+      target: 600
+      readings: {}
+      validators: {}
+      tag: ws_manual_nw
+mode: single
