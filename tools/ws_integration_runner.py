@@ -143,6 +143,7 @@ def run(selected):
     original = {}
     ws = None
     changed = False
+    legacy_original = {}
     try:
         safety()
         baseline = logs()
@@ -152,15 +153,23 @@ def run(selected):
         scheduler = os.environ.get("WS_SCHEDULER_ENTITY", "automation.ws_scheduler")
         if state(scheduler) != "on":
             raise RuntimeError("Scheduler is not enabled")
-        for entity in os.environ.get("WS_LEGACY_AUTOMATIONS", "automation.watering_start_8_min").split(","):
-            if state(entity.strip()) != "off":
-                raise RuntimeError("Legacy automation must be disabled: " + entity)
+        legacy_entities = [e.strip() for e in os.environ.get("WS_LEGACY_AUTOMATIONS", "automation.watering_scheduler").split(",") if e.strip()]
+        if not legacy_entities or scheduler in legacy_entities:
+            raise RuntimeError("Invalid legacy automation configuration")
+        legacy_original = {e: state(e) for e in legacy_entities}
+        if any(v not in ("on", "off") for v in legacy_original.values()):
+            raise RuntimeError("Legacy automation state unavailable")
         item_id = str(api("states/"+scheduler)["attributes"]["id"])
         original = {e: state(e) for e in [GLOBAL, *FIELDS.values()]}
         if any(v in ("unknown","unavailable") for v in original.values()):
             raise RuntimeError("Cannot snapshot unavailable configuration")
         ws = connect()
         changed = True
+        set_state(GLOBAL, "off")
+        for entity in legacy_original:
+            api("services/automation/turn_off", {"entity_id": entity, "stop_actions": True})
+            if state(entity) != "off":
+                raise RuntimeError("Cannot disable legacy automation: " + entity)
         today = datetime.now(zone).date()
         outside = (today + timedelta(days=1)).strftime("%m-%d")
         cases = [
@@ -189,6 +198,8 @@ def run(selected):
                 raise RuntimeError("Next Run does not match requested schedule")
             before = logs()
             last_triggered = api("states/"+scheduler)["attributes"].get("last_triggered")
+            if any(state(e) != "off" for e in legacy_original):
+                raise RuntimeError("Legacy automation unexpectedly enabled")
             set_state(GLOBAL, authorization)
             if name.startswith("07"):
                 set_state(FIELDS["target"], "777")
@@ -259,6 +270,14 @@ def run(selected):
                     set_state(entity,value)
                 except Exception as exc:
                     report["restoration_errors"].append(str(exc))
+            if not report["restoration_errors"]:
+                for entity, value in legacy_original.items():
+                    try:
+                        api("services/automation/turn_" + value, {"entity_id": entity})
+                        if state(entity) != value:
+                            raise RuntimeError("Legacy automation restoration not confirmed: " + entity)
+                    except Exception as exc:
+                        report["restoration_errors"].append(str(exc))
             if not report["restoration_errors"]:
                 try:
                     set_state(GLOBAL,original[GLOBAL])
