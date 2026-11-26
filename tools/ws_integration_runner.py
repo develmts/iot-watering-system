@@ -114,11 +114,11 @@ def collect(ws, until):
             events.append(msg["event"]["data"])
     return events
 
-def trace_command(ws, command):
-    ws.send(json.dumps({"id": 2, **command}))
+def trace_command(ws, command_id, command):
+    ws.send(json.dumps({"id": command_id, **command}))
     while True:
         msg = json.loads(ws.recv())
-        if msg.get("id") == 2 and msg.get("type") == "result":
+        if msg.get("id") == command_id and msg.get("type") == "result":
             if not msg.get("success"):
                 raise RuntimeError("Trace API: " + str(msg.get("error")))
             return msg["result"]
@@ -130,11 +130,11 @@ def get_trace(item_id, scheduled):
         with_trace.send(json.dumps({"type":"auth","access_token":TOKEN}))
         if json.loads(with_trace.recv()).get("type") != "auth_ok":
             raise RuntimeError("Trace authentication failed")
-        entries = trace_command(with_trace, {"type":"trace/list","domain":"automation","item_id":item_id})
+        entries = trace_command(with_trace, 1, {"type":"trace/list","domain":"automation","item_id":item_id})
         matches = [e for e in entries if abs(datetime.fromisoformat(e["timestamp"]["start"]).timestamp()-scheduled.timestamp()) < 10]
         if len(matches) != 1:
             raise RuntimeError("Expected exactly one matching scheduler trace")
-        return trace_command(with_trace, {"type":"trace/get","domain":"automation","item_id":item_id,"run_id":matches[0]["run_id"]})
+        return trace_command(with_trace, 2, {"type":"trace/get","domain":"automation","item_id":item_id,"run_id":matches[0]["run_id"]})
     finally:
         with_trace.close()
 
@@ -204,6 +204,7 @@ def run(selected):
             if name.startswith("07"):
                 set_state(FIELDS["target"], "777")
                 config["target"] = "777"
+            print("Waiting for scheduled trigger: " + scheduled.isoformat(), flush=True)
             events = collect(ws, scheduled.timestamp()+25)
             after = logs()
             # Require overlap; never mistake old log messages for this run.
@@ -233,6 +234,7 @@ def run(selected):
             result = {"name":name,"status":"PASS" if all(checks.values()) else "FAIL","checks":checks,"events":events,"logs":delta,"last_triggered_before":last_triggered,"last_triggered_after":current_trigger,"next_run":str(next_run)}
             if name.startswith(("01","06")):
                 try:
+                    print("Retrieving automation trace", flush=True)
                     trace = get_trace(item_id, scheduled)
                     result["trace"] = trace
                     steps = trace["trace"]
