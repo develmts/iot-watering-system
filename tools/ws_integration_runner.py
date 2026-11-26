@@ -2,7 +2,7 @@ import os
 import json
 import time
 import hashlib
-import subprocess
+import paramiko
 import urllib.request
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -17,6 +17,8 @@ for line in (ROOT / ".env").read_text(encoding="utf-8-sig").splitlines():
 URL = os.environ["HA_URL"].rstrip("/")
 TOKEN = os.environ["HA_TOKEN"]
 SSH = os.environ["HA_SSH"]
+SSH_PASSWORD = os.environ["HA_SSH_PASSWORD"]
+SSH_PORT = int(os.environ.get("HA_SSH_PORT", "22"))
 REMOTE = os.environ["WS_REMOTE_DIR"]
 LOG_CMD = os.environ["WS_LOG_COMMAND"]
 GLOBAL = "input_boolean.auto_watering"
@@ -56,7 +58,19 @@ def set_state(entity, value):
         raise RuntimeError("State write not confirmed: " + entity)
 
 def ssh(command):
-    return subprocess.check_output(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", SSH, command], timeout=40, text=True)
+    user, host = SSH.rsplit("@", 1)
+    with paramiko.SSHClient() as client:
+        client.load_system_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+        client.connect(host, port=SSH_PORT, username=user, password=SSH_PASSWORD,
+                       allow_agent=False, look_for_keys=False, timeout=10,
+                       auth_timeout=15, banner_timeout=15)
+        _, stdout, stderr = client.exec_command(command, timeout=40)
+        output = stdout.read().decode("utf-8", errors="replace")
+        error = stderr.read().decode("utf-8", errors="replace")
+        if stdout.channel.recv_exit_status() != 0:
+            raise RuntimeError("SSH command failed: " + error.strip())
+        return output
 
 def logs():
     return ssh(LOG_CMD)
