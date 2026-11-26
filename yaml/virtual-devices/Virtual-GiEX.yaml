@@ -1,0 +1,71 @@
+version: 1
+devices:
+  Virtual GiEX:
+    - platform: switch
+      name: State
+      initial_value: "off"
+      persistent: false
+    - platform: select
+      name: Mode
+      options:
+        - duration
+        - capacity
+      initial_value: duration
+      persistent: true
+    - platform: number
+      name: Irrigation Target
+      initial_value: "600"
+      min: 0
+      max: 43200
+      unit_of_measurement: "seconds or litres"
+      persistent: true
+    - platform: number
+      name: Cycle Irrigation Interval
+      initial_value: "0"
+      min: 0
+      max: 43200
+      unit_of_measurement: "sec"
+      persistent: true
+    - platform: number
+      name: Cycle Irrigation Num Times
+      initial_value: "0"
+      min: 0
+      max: 100
+      persistent: true
+    - platform: sensor
+      name: Battery
+      class: battery
+      state_class: measurement
+      unit_of_measurement: "%"
+      initial_value: "100"
+      persistent: true
+    - platform: sensor
+      name: Water Consumed
+      class: water
+      state_class: total_increasing
+      unit_of_measurement: "L"
+      initial_value: "0"
+      persistent: true
+    - platform: sensor
+      name: Linkquality
+      state_class: measurement
+      unit_of_measurement: "lqi"
+      initial_value: "12"
+      persistent: true
+    # Text substitutes for temporal sensors unsupported by Virtual Components.
+    - platform: text
+      name: Irrigation Start Time
+      initial_value: "00:00:00"
+      persistent: true
+    - platform: text
+      name: Irrigation End Time
+      initial_value: "00:00:00"
+      persistent: true
+    - platform: text
+      name: Last Irrigation Duration
+      initial_value: "00:00:00"
+      persistent: true
+    - platform: text
+      name: Last Seen
+      initial_value: "2026-11-26T15:30:56+00:00"
+      persistent: true
