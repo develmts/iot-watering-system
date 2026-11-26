@@ -1,4 +1,5 @@
 import os
+import argparse
 import json
 import time
 import hashlib
@@ -113,8 +114,32 @@ def collect(ws, until):
             events.append(msg["event"]["data"])
     return events
 
-def run():
-    report = {"tests": [], "restoration_errors": []}
+def trace_command(ws, command):
+    ws.send(json.dumps({"id": 2, **command}))
+    while True:
+        msg = json.loads(ws.recv())
+        if msg.get("id") == 2 and msg.get("type") == "result":
+            if not msg.get("success"):
+                raise RuntimeError("Trace API: " + str(msg.get("error")))
+            return msg["result"]
+
+def get_trace(item_id, scheduled):
+    with_trace = websocket.create_connection(URL.replace("https://","wss://",1).replace("http://","ws://",1) + "/api/websocket", timeout=20)
+    try:
+        json.loads(with_trace.recv())
+        with_trace.send(json.dumps({"type":"auth","access_token":TOKEN}))
+        if json.loads(with_trace.recv()).get("type") != "auth_ok":
+            raise RuntimeError("Trace authentication failed")
+        entries = trace_command(with_trace, {"type":"trace/list","domain":"automation","item_id":item_id})
+        matches = [e for e in entries if abs(datetime.fromisoformat(e["timestamp"]["start"]).timestamp()-scheduled.timestamp()) < 10]
+        if len(matches) != 1:
+            raise RuntimeError("Expected exactly one matching scheduler trace")
+        return trace_command(with_trace, {"type":"trace/get","domain":"automation","item_id":item_id,"run_id":matches[0]["run_id"]})
+    finally:
+        with_trace.close()
+
+def run(selected):
+    report = {"tests": [], "restoration_errors": [], "selected": selected}
     original = {}
     ws = None
     changed = False
@@ -127,6 +152,10 @@ def run():
         scheduler = os.environ.get("WS_SCHEDULER_ENTITY", "automation.ws_scheduler")
         if state(scheduler) != "on":
             raise RuntimeError("Scheduler is not enabled")
+        for entity in os.environ.get("WS_LEGACY_AUTOMATIONS", "automation.watering_start_8_min").split(","):
+            if state(entity.strip()) != "off":
+                raise RuntimeError("Legacy automation must be disabled: " + entity)
+        item_id = str(api("states/"+scheduler)["attributes"]["id"])
         original = {e: state(e) for e in [GLOBAL, *FIELDS.values()]}
         if any(v in ("unknown","unavailable") for v in original.values()):
             raise RuntimeError("Cannot snapshot unavailable configuration")
@@ -143,6 +172,7 @@ def run():
             ("06_invalid_json", "on", {"devices":"invalid-json"}, None),
             ("07_updated_config", "on", {}, "PREPARATION_DISABLED"),
         ]
+        cases = [case for case in cases if case[0][:2] in selected]
         for name, authorization, overrides, expected_code in cases:
             print(name, flush=True)
             safety()
@@ -190,9 +220,25 @@ def run():
                 if name.startswith("06"):
                     checks["scheduler_triggered"] = current_trigger != last_triggered
             result = {"name":name,"status":"PASS" if all(checks.values()) else "FAIL","checks":checks,"events":events,"logs":delta,"last_triggered_before":last_triggered,"last_triggered_after":current_trigger,"next_run":str(next_run)}
-            if name.startswith(("01","06")) and result["status"]=="PASS":
-                result["status"]="PARTIAL"
-                result["note"]="Automation trace / error notification requires separate verification."
+            if name.startswith(("01","06")):
+                try:
+                    trace = get_trace(item_id, scheduled)
+                    result["trace"] = trace
+                    steps = trace["trace"]
+                    if name.startswith("01"):
+                        checks["trace"] = (trace.get("script_execution") == "failed_conditions"
+                            and any(step.get("result", {}).get("result") is False
+                                    for step in steps.get("condition/0", [])))
+                    else:
+                        checks["trace"] = (trace.get("script_execution") == "aborted"
+                            and any(step.get("result", {}).get("params", {}).get("service") == "create"
+                                    and step.get("result", {}).get("params", {}).get("domain") == "persistent_notification"
+                                    for entries in steps.values() for step in entries))
+                    result["status"] = "PASS" if all(checks.values()) else "FAIL"
+                except Exception as exc:
+                    result["trace_error"] = str(exc)
+                    if result["status"] == "PASS":
+                        result["status"] = "PARTIAL"
             report["tests"].append(result)
             print(result["status"], flush=True)
             set_state(GLOBAL, "off")
@@ -222,7 +268,11 @@ def run():
             ws.close()
         REPORT.write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding="utf-8")
         print("Report:",REPORT)
-    return 0 if len(report["tests"])==7 and all(t["status"]=="PASS" for t in report["tests"]) and not report.get("error") and not report["restoration_errors"] else 1
+    return 0 if len(report["tests"])==len(selected) and all(t["status"]=="PASS" for t in report["tests"]) and not report.get("error") and not report["restoration_errors"] else 1
 
 if __name__ == "__main__":
-    raise SystemExit(run())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tests", nargs="+", choices=[f"{i:02}" for i in range(1, 8)],
+                        default=[f"{i:02}" for i in range(1, 8)])
+    args = parser.parse_args()
+    raise SystemExit(run(sorted(set(args.tests))))
