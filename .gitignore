@@ -1,4 +1,6 @@
-@"
 __pycache__/
 *.py[cod]
-"@ | Set-Content .gitignore
+.env
+.env.*
+!.env.example
+ws-test-report.json
