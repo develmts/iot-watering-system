@@ -54,7 +54,7 @@ async def last_seen(entities):
     await set_text(entities, "last_seen", datetime.now(timezone.utc).isoformat())
 
 
-async def cycle(entities):
+async def cycle(entities, stopped):
     valve = entities["state"]
     mode = await state(entities["mode"])
     target = float(await state(entities["irrigation_target"]))
@@ -73,7 +73,11 @@ async def cycle(entities):
                 await set_consumption(entities, target if mode == "capacity" else duration * FLOW)
                 await service("switch", "turn_off", valve)
                 break
-            await asyncio.sleep(min(INTERVAL, duration - elapsed))
+            try:
+                await asyncio.wait_for(stopped.wait(), min(INTERVAL, duration - elapsed))
+                break
+            except asyncio.TimeoutError:
+                pass
             if await state(valve) != "on":
                 break
             await set_consumption(entities, min(time.monotonic() - start, duration) * FLOW)
@@ -143,6 +147,7 @@ async def main():
     load_env()
     url = os.environ["HA_URL"].rstrip("/").replace("https://", "wss://", 1).replace("http://", "ws://", 1)
     task = None
+    stopped = None
     async with websockets.connect(url + "/api/websocket") as ws:
         await ws.recv()
         await ws.send(json.dumps({"type": "auth", "access_token": os.environ["HA_TOKEN"]}))
@@ -167,21 +172,16 @@ async def main():
                 old = (data.get("old_state") or {}).get("state")
                 new = (data.get("new_state") or {}).get("state")
                 if old == "off" and new == "on" and task is None:
-                    task = asyncio.create_task(cycle(entities))
+                    stopped = asyncio.Event()
+                    task = asyncio.create_task(cycle(entities, stopped))
                 elif old == "on" and new == "off" and task is not None:
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
+                    stopped.set()
+                    await task
                     task = None
         finally:
             if task is not None:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+                stopped.set()
+                await task
             if await state(valve) == "on":
                 await service("switch", "turn_off", valve)
 
