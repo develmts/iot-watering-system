@@ -158,6 +158,52 @@ class ContractTests(unittest.TestCase):
                 if mode == "oneTime":
                     self.ws.date.assert_not_called()
 
+    def test_preparation(self):
+        for scenario in ("success", "already_ready", "invalid", "timeout", "busy", "valve_open"):
+            with self.subTest(scenario=scenario):
+                hass, reporter, store, device = Mock(), Mock(), Mock(), Mock()
+                device.device_id = next(iter(Controller.PREPARATION_DEVICES))
+                device.get_valve_state.return_value = "off"
+                device.get_battery.return_value = 80
+                device.get_consumption.return_value = 0
+                device.get_mode.return_value = "capacity"
+                device.get_target.return_value = 10
+                controller = Controller(hass, reporter, store)
+                request = self.ws.normalize_request(self.data)
+                if scenario == "already_ready":
+                    device.get_mode.return_value = "duration"
+                    device.get_target.return_value = 600
+                if scenario == "invalid":
+                    device.validate_target.side_effect = ValueError("Invalid target")
+                controller.handle_request(request, device)
+                if scenario == "busy":
+                    controller.handle_request(request, device)
+                    self.assertEqual(reporter.report.call_args.kwargs["code"], "PREPARATION_BUSY")
+                    device.set_mode.assert_called_once_with("duration")
+                if scenario in ("success", "busy", "timeout", "valve_open"):
+                    callback = hass.run_in.call_args.kwargs.copy()
+                    if scenario == "timeout":
+                        callback["deadline"] = 0
+                    elif scenario == "valve_open":
+                        device.get_valve_state.return_value = "on"
+                    else:
+                        device.get_mode.return_value = "duration"
+                    controller.verify_step(callback)
+                    if scenario in ("success", "busy"):
+                        device.set_target.assert_called_once_with(600)
+                        device.get_target.return_value = 600
+                        controller.verify_step(hass.run_in.call_args.kwargs.copy())
+                expected = "PREPARATION_FAILED" if scenario in ("invalid", "timeout", "valve_open") else "PREPARATION_READY"
+                self.assertEqual(reporter.report.call_args.kwargs["code"], expected)
+                self.assertFalse(controller.preparing)
+                device.start.assert_not_called()
+                device.stop.assert_not_called()
+                store.save.assert_not_called()
+                if scenario in ("invalid", "already_ready"):
+                    device.set_mode.assert_not_called()
+                if scenario in ("invalid", "already_ready", "timeout", "valve_open"):
+                    device.set_target.assert_not_called()
+
     def test_preflight_never_actuates(self):
         hass, reporter, store, device = Mock(), Mock(), Mock(), Mock()
         device.get_valve_state.return_value = "off"
