@@ -120,6 +120,30 @@ class WateringDevice:
         return self.hass.get_state(self.valve_entity)
 
 
+    def validate_target(self, mode, target):
+        import math
+
+        if not self.mode_entity or not self.target_entity:
+            raise ValueError("Missing mode or target entity")
+        mode_state = self.hass.get_state(self.mode_entity, attribute="all")
+        target_state = self.hass.get_state(self.target_entity, attribute="all")
+        for state in (mode_state, target_state):
+            if not state or state.get("state") in (None, "unknown", "unavailable"):
+                raise ValueError("Mode or target unavailable")
+        if mode not in mode_state["attributes"].get("options", []):
+            raise ValueError("Unsupported mode")
+        attrs = target_state["attributes"]
+        if attrs.get("unit_of_measurement") != "seconds or litres":
+            raise ValueError("Unsupported target unit")
+        minimum, maximum = float(attrs["min"]), float(attrs["max"])
+        if not math.isfinite(target) or not minimum <= target <= maximum:
+            raise ValueError("Target outside device range")
+        step = attrs.get("step")
+        if step is not None:
+            steps = (target - minimum) / float(step)
+            if not math.isclose(steps, round(steps), rel_tol=0, abs_tol=1e-8):
+                raise ValueError("Target incompatible with device step")
+
     def set_mode(self, mode):
         if self.mode_entity is None:
             return False
