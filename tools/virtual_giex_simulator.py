@@ -80,7 +80,10 @@ async def cycle(entities, stopped):
                 pass
             if await state(valve) != "on":
                 break
-            await set_consumption(entities, min(time.monotonic() - start, duration) * FLOW)
+            elapsed = min(time.monotonic() - start, duration)
+            consumed = elapsed * FLOW
+            await set_consumption(entities, consumed)
+            print(f"FLOW {elapsed:.2f}s | {consumed:.3f} L", flush=True)
             await last_seen(entities)
     finally:
         elapsed = min(time.monotonic() - start, duration)
