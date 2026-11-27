@@ -1,0 +1,18 @@
+[
+  {
+    "id": "01",
+    "mode": "duration",
+    "target": 20
+  },
+  {
+    "id": "02",
+    "mode": "capacity",
+    "target": 10
+  },
+  {
+    "id": "03",
+    "mode": "duration",
+    "target": 60,
+    "stop_after": 10
+  }
+]
